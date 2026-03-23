@@ -383,6 +383,7 @@
     .api-row { flex-direction: column; }
   }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -486,41 +487,53 @@ dropzone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
 
-function handleFile(file) {
-  // Allow image/* plus HEIC/HEIF by extension
+async function handleFile(file) {
   const isImage = file.type.startsWith('image/') || file.name.match(/\.(heic|heif)$/i);
   if (!isImage) {
-    showError('Please upload an image file (JPG, PNG, HEIC, screenshot, etc.).');
+    showError('Please upload an image file (JPG, PNG, HEIC, etc.).');
     return;
   }
-  const reader = new FileReader();
-  reader.onload = e => {
-    const dataUrl = e.target.result;
-    const img = new Image();
-    img.onload = () => {
-      if (img.naturalWidth === 0) {
-        showError('This browser cannot open HEIC files directly. Please take a screenshot of your schedule instead (Mac: Cmd+Shift+3, iPhone: side button + volume up), then upload that.');
-        return;
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-      imageBase64 = jpegDataUrl.split(',')[1];
-      imageType = 'image/jpeg';
-      document.getElementById('previewImg').src = jpegDataUrl;
-      document.getElementById('previewContainer').style.display = 'block';
-      dropzone.style.display = 'none';
-      document.getElementById('analyzeBtn').disabled = false;
-      hideError();
+
+  const isHeic = file.type === 'image/heic' || file.type === 'image/heif' || file.name.match(/\.(heic|heif)$/i);
+
+  try {
+    let blob = file;
+
+    // Convert HEIC to JPEG using heic2any library
+    if (isHeic) {
+      document.getElementById('loading').style.display = 'flex';
+      document.getElementById('loading').querySelector('span').textContent = 'Converting HEIC image...';
+      blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.95 });
+    }
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target.result;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        imageBase64 = jpegDataUrl.split(',')[1];
+        imageType = 'image/jpeg';
+        document.getElementById('previewImg').src = jpegDataUrl;
+        document.getElementById('previewContainer').style.display = 'block';
+        dropzone.style.display = 'none';
+        document.getElementById('analyzeBtn').disabled = false;
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('loading').querySelector('span').textContent = 'Analyzing your schedule with Claude...';
+        hideError();
+      };
+      img.src = dataUrl;
     };
-    img.onerror = () => {
-      showError('Could not read this file. Please take a screenshot of your schedule instead (Mac: Cmd+Shift+3, iPhone: side button + volume up), then upload that.');
-    };
-    img.src = dataUrl;
-  };
-  reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
+
+  } catch (err) {
+    document.getElementById('loading').style.display = 'none';
+    showError('Could not process this image: ' + err.message);
+  }
 }
 
 function clearImage() {
