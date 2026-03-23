@@ -415,7 +415,7 @@
         a screenshot of your schedule
       </div>
     </div>
-    <input type="file" id="fileInput" accept="image/*" style="display:none">
+    <input type="file" id="fileInput" accept="image/*,.heic,.heif" style="display:none">
 
     <div class="preview-container" id="previewContainer">
       <img id="previewImg">
@@ -487,16 +487,21 @@ dropzone.addEventListener('drop', e => {
 fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
 
 function handleFile(file) {
-  if (!file.type.startsWith('image/')) {
-    showError('Please upload an image file.');
+  // Allow image/* plus HEIC/HEIF by extension
+  const isImage = file.type.startsWith('image/') || file.name.match(/\.(heic|heif)$/i);
+  if (!isImage) {
+    showError('Please upload an image file (JPG, PNG, HEIC, screenshot, etc.).');
     return;
   }
   const reader = new FileReader();
   reader.onload = e => {
     const dataUrl = e.target.result;
-    // Convert any format (including HEIC) to JPEG via canvas
     const img = new Image();
     img.onload = () => {
+      if (img.naturalWidth === 0) {
+        showError('This browser cannot open HEIC files directly. Please take a screenshot of your schedule instead (Mac: Cmd+Shift+3, iPhone: side button + volume up), then upload that.');
+        return;
+      }
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
@@ -509,6 +514,9 @@ function handleFile(file) {
       dropzone.style.display = 'none';
       document.getElementById('analyzeBtn').disabled = false;
       hideError();
+    };
+    img.onerror = () => {
+      showError('Could not read this file. Please take a screenshot of your schedule instead (Mac: Cmd+Shift+3, iPhone: side button + volume up), then upload that.');
     };
     img.src = dataUrl;
   };
