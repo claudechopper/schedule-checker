@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schedule Coverage Checker</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --danger: #ef4444;
+    --danger-bg: #451a1a;
+    --success: #22c55e;
+    --success-bg: #14532d;
+    --warn: #f59e0b;
+    --warn-bg: #452a08;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .container { max-width: 900px; margin: 0 auto; }
+
+  h1 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 28px;
+  }
+
+  /* API Key Section */
+  .api-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .api-section label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .api-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .api-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-family: monospace;
+  }
+
+  .api-row input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .api-note {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+
+  .btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn:hover { background: var(--accent-hover); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  .btn-outline:hover {
+    background: var(--card);
+  }
+
+  /* Upload Section */
+  .upload-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .upload-section h2 {
+    font-size: 1.1rem;
+    margin-bottom: 14px;
+  }
+
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(59, 130, 246, 0.05);
+  }
+
+  .dropzone-icon { font-size: 2.5rem; margin-bottom: 10px; }
+  .dropzone-text { color: var(--text-dim); font-size: 0.9rem; }
+  .dropzone-text strong { color: var(--accent); }
+
+  .preview-container {
+    margin-top: 14px;
+    position: relative;
+    display: none;
+  }
+
+  .preview-container img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .preview-remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .analyze-row {
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* Settings row */
+  .settings-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .setting-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+  }
+
+  .setting-group label { color: var(--text-dim); white-space: nowrap; }
+
+  .setting-group select, .setting-group input[type="number"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-size: 0.85rem;
+  }
+
+  .setting-group input[type="number"] { width: 55px; }
+
+  /* Loading */
+  .loading {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    padding: 14px 0;
+  }
+
+  .spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Results */
+  .results {
+    display: none;
+    margin-top: 20px;
+  }
+
+  .result-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .result-card h2 {
+    font-size: 1.1rem;
+    margin-bottom: 14px;
+  }
+
+  .status-banner {
+    border-radius: 10px;
+    padding: 16px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .status-banner.all-good {
+    background: var(--success-bg);
+    border: 1px solid var(--success);
+    color: var(--success);
+  }
+
+  .status-banner.has-gaps {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+  }
+
+  .status-icon { font-size: 1.4rem; }
+
+  /* Gap list */
+  .gap-list { list-style: none; }
+
+  .gap-item {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--danger);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+  }
+
+  .gap-day {
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+  }
+
+  .gap-hours {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+  }
+
+  .gap-detail {
+    color: var(--warn);
+    font-size: 0.85rem;
+    margin-top: 2px;
+  }
+
+  /* Coverage grid */
+  .coverage-grid {
+    overflow-x: auto;
+    margin-top: 10px;
+  }
+
+  .coverage-grid table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+
+  .coverage-grid th, .coverage-grid td {
+    padding: 6px 8px;
+    text-align: center;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  .coverage-grid th {
+    background: var(--bg);
+    color: var(--text-dim);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+  }
+
+  .coverage-grid td.ok { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+  .coverage-grid td.warn { background: rgba(245, 158, 11, 0.15); color: var(--warn); }
+  .coverage-grid td.danger { background: rgba(239, 68, 68, 0.2); color: var(--danger); font-weight: 700; }
+  .coverage-grid td.day-label { text-align: left; font-weight: 600; background: var(--bg); }
+
+  /* Raw data toggle */
+  .raw-toggle {
+    margin-top: 12px;
+    font-size: 0.8rem;
+  }
+
+  .raw-toggle summary {
+    cursor: pointer;
+    color: var(--text-dim);
+  }
+
+  .raw-data {
+    margin-top: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+    max-height: 300px;
+    overflow-y: auto;
+    color: var(--text-dim);
+  }
+
+  /* Error */
+  .error-msg {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: var(--danger);
+    font-size: 0.9rem;
+    margin-top: 10px;
+    display: none;
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    body { padding: 12px; }
+    h1 { font-size: 1.3rem; }
+    .settings-row { flex-direction: column; gap: 10px; }
+    .api-row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Schedule Coverage Checker</h1>
+  <p class="subtitle">Upload a screenshot of your employee schedule to check for staffing gaps.</p>
+
+  <!-- API Key -->
+  <div class="api-section">
+    <label>Claude API Key</label>
+    <div class="api-row">
+      <input type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off">
+      <button class="btn btn-outline" onclick="toggleKeyVisibility()" id="toggleBtn">Show</button>
+    </div>
+    <p class="api-note">Your key is saved in this browser's local storage so you don't have to re-enter it. It never leaves your computer except to go directly to the Claude API. <span id="savedIndicator" style="display:none; color: var(--success); font-weight: 600;">&#10003; Saved</span></p>
+  </div>
+
+  <!-- Settings + Upload -->
+  <div class="upload-section">
+    <h2>Upload Schedule</h2>
+
+    <div class="settings-row">
+      <div class="setting-group">
+        <label>Start Hour:</label>
+        <select id="startHour"></select>
+      </div>
+      <div class="setting-group">
+        <label>End Hour:</label>
+        <select id="endHour"></select>
+      </div>
+      <div class="setting-group">
+        <label>Min Staff:</label>
+        <input type="number" id="minStaff" value="2" min="1" max="20">
+      </div>
+    </div>
+
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+      <div class="dropzone-icon">📸</div>
+      <div class="dropzone-text">
+        <strong>Click to upload</strong> or drag & drop<br>
+        a screenshot of your schedule
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+
+    <div class="preview-container" id="previewContainer">
+      <img id="previewImg">
+      <button class="preview-remove" onclick="clearImage()">&times;</button>
+    </div>
+
+    <div class="analyze-row">
+      <button class="btn" id="analyzeBtn" onclick="analyzeSchedule()" disabled>Analyze Schedule</button>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <span>Analyzing your schedule with Claude...</span>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results">
+    <div id="statusBanner" class="status-banner"></div>
+
+    <div class="result-card" id="gapsCard" style="display:none">
+      <h2>Staffing Gaps Found</h2>
+      <ul class="gap-list" id="gapList"></ul>
+    </div>
+
+    <div class="result-card">
+      <h2>Coverage Grid</h2>
+      <div class="coverage-grid" id="coverageGrid"></div>
+    </div>
+
+    <div class="result-card">
+      <details class="raw-toggle">
+        <summary>Show extracted schedule data</summary>
+        <div class="raw-data" id="rawData"></div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+// Populate hour selects
+const startSel = document.getElementById('startHour');
+const endSel = document.getElementById('endHour');
+for (let h = 0; h < 24; h++) {
+  const label = h === 0 ? '12 AM' : h < 12 ? h + ' AM' : h === 12 ? '12 PM' : (h - 12) + ' PM';
+  startSel.add(new Option(label, h));
+  endSel.add(new Option(label, h));
+}
+startSel.value = 9;
+endSel.value = 19; // 7 PM
+
+let imageBase64 = null;
+let imageType = null;
+
+// Load saved API key on startup
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('schedule_checker_api_key');
+  if (saved) {
+    document.getElementById('apiKey').value = saved;
+    document.getElementById('savedIndicator').style.display = 'inline';
+  }
+});
+
+// Save key whenever it changes
+document.getElementById('apiKey').addEventListener('input', function() {
+  const val = this.value.trim();
+  if (val) {
+    localStorage.setItem('schedule_checker_api_key', val);
+    document.getElementById('savedIndicator').style.display = 'inline';
+  } else {
+    localStorage.removeItem('schedule_checker_api_key');
+    document.getElementById('savedIndicator').style.display = 'none';
+  }
+});
+
+// Toggle API key visibility
+function toggleKeyVisibility() {
+  const inp = document.getElementById('apiKey');
+  const btn = document.getElementById('toggleBtn');
+  if (inp.type === 'password') {
+    inp.type = 'text'; btn.textContent = 'Hide';
+  } else {
+    inp.type = 'password'; btn.textContent = 'Show';
+  }
+}
+
+// File handling
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  if (!file.type.startsWith('image/')) {
+    showError('Please upload an image file.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    imageBase64 = dataUrl.split(',')[1];
+    imageType = file.type;
+    document.getElementById('previewImg').src = dataUrl;
+    document.getElementById('previewContainer').style.display = 'block';
+    dropzone.style.display = 'none';
+    document.getElementById('analyzeBtn').disabled = false;
+    hideError();
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearImage() {
+  imageBase64 = null;
+  imageType = null;
+  document.getElementById('previewContainer').style.display = 'none';
+  dropzone.style.display = 'block';
+  document.getElementById('analyzeBtn').disabled = true;
+  fileInput.value = '';
+  document.getElementById('results').style.display = 'none';
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideError() {
+  document.getElementById('errorMsg').style.display = 'none';
+}
+
+// Main analysis
+async function analyzeSchedule() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) { showError('Please enter your Claude API key.'); return; }
+  if (!imageBase64) { showError('Please upload a schedule image.'); return; }
+
+  const startH = parseInt(document.getElementById('startHour').value);
+  const endH = parseInt(document.getElementById('endHour').value);
+  const minStaff = parseInt(document.getElementById('minStaff').value);
+
+  if (startH >= endH) { showError('Start hour must be before end hour.'); return; }
+
+  hideError();
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('results').style.display = 'none';
+
+  const fmtH = h => h === 0 ? '12AM' : h < 12 ? h + 'AM' : h === 12 ? '12PM' : (h-12) + 'PM';
+
+  const prompt = `You are analyzing an employee work schedule image. Extract every employee's shifts for each day of the week shown.
+
+Return ONLY valid JSON (no markdown, no backticks) in this exact format:
+{
+  "week_label": "string describing the week if visible",
+  "days": ["Monday", "Tuesday", ...],
+  "employees": [
+    {
+      "name": "Employee Name",
+      "shifts": {
+        "Monday": [{"start": "9:00", "end": "17:00"}],
+        "Tuesday": [],
+        ...
+      }
+    }
+  ]
+}
+
+Rules:
+- Use 24-hour time format (e.g., 9:00, 13:30, 17:00, 22:00)
+- If an employee has no shift on a day, use an empty array []
+- If a shift spans a lunch break but appears as one block, keep it as one shift
+- Include ALL employees visible, even if they have no shifts
+- Read times as precisely as possible from the visual grid
+- Include every day column shown in the image
+- Pay close attention to where each colored block starts and ends on the time axis`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: imageType, data: imageBase64 }
+            },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error?.message || `API error: ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const text = data.content[0].text;
+
+    let schedule;
+    try {
+      // Try to extract JSON from potential markdown code blocks
+      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+      schedule = JSON.parse(jsonMatch[1].trim());
+    } catch (e) {
+      throw new Error('Could not parse schedule data from Claude response. Raw: ' + text.substring(0, 200));
+    }
+
+    displayResults(schedule, startH, endH, minStaff);
+
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('analyzeBtn').disabled = false;
+  }
+}
+
+function displayResults(schedule, startH, endH, minStaff) {
+  const days = schedule.days || [];
+  const employees = schedule.employees || [];
+
+  // Build coverage map: for each day, for each hour, count staff
+  const coverage = {};
+  const gaps = [];
+
+  for (const day of days) {
+    coverage[day] = {};
+    for (let h = startH; h < endH; h++) {
+      coverage[day][h] = { count: 0, names: [] };
+    }
+  }
+
+  for (const emp of employees) {
+    for (const day of days) {
+      const shifts = emp.shifts?.[day] || [];
+      for (const shift of shifts) {
+        const startParts = shift.start.split(':').map(Number);
+        const endParts = shift.end.split(':').map(Number);
+        const sH = startParts[0] + (startParts[1] || 0) / 60;
+        const eH = endParts[0] + (endParts[1] || 0) / 60;
+
+        for (let h = startH; h < endH; h++) {
+          // Employee covers this hour if their shift overlaps with [h, h+1)
+          if (sH < h + 1 && eH > h) {
+            if (coverage[day] && coverage[day][h]) {
+              coverage[day][h].count++;
+              coverage[day][h].names.push(emp.name);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Find gaps
+  for (const day of days) {
+    const dayGaps = [];
+    for (let h = startH; h < endH; h++) {
+      const c = coverage[day][h];
+      if (c.count < minStaff) {
+        dayGaps.push({ hour: h, count: c.count, names: c.names });
+      }
+    }
+    if (dayGaps.length > 0) {
+      gaps.push({ day, gaps: dayGaps });
+    }
+  }
+
+  // Status banner
+  const banner = document.getElementById('statusBanner');
+  if (gaps.length === 0) {
+    banner.className = 'status-banner all-good';
+    banner.innerHTML = `<span class="status-icon">&#10003;</span> All clear! You have ${minStaff}+ staff every hour from ${fmtHour(startH)} to ${fmtHour(endH)} all week.`;
+  } else {
+    const totalGapHours = gaps.reduce((sum, g) => sum + g.gaps.length, 0);
+    banner.className = 'status-banner has-gaps';
+    banner.innerHTML = `<span class="status-icon">&#9888;</span> ${totalGapHours} hour slot${totalGapHours > 1 ? 's' : ''} across ${gaps.length} day${gaps.length > 1 ? 's' : ''} with fewer than ${minStaff} staff.`;
+  }
+
+  // Gap list
+  const gapsCard = document.getElementById('gapsCard');
+  const gapList = document.getElementById('gapList');
+  gapList.innerHTML = '';
+  if (gaps.length > 0) {
+    gapsCard.style.display = 'block';
+    for (const dayGap of gaps) {
+      // Group consecutive hours
+      const ranges = groupConsecutive(dayGap.gaps);
+      const li = document.createElement('li');
+      li.className = 'gap-item';
+
+      let html = `<div class="gap-day">${dayGap.day}</div>`;
+      for (const range of ranges) {
+        const timeStr = range.length === 1
+          ? `${fmtHour(range[0].hour)} - ${fmtHour(range[0].hour + 1)}`
+          : `${fmtHour(range[0].hour)} - ${fmtHour(range[range.length - 1].hour + 1)}`;
+        const staffCount = range[0].count;
+        const staffNames = range[0].names.length ? range[0].names.join(', ') : 'nobody';
+        html += `<div class="gap-hours">${timeStr} &mdash; only ${staffCount} person${staffCount !== 1 ? 's' : ''} (${staffNames})</div>`;
+      }
+      li.innerHTML = html;
+      gapList.appendChild(li);
+    }
+  } else {
+    gapsCard.style.display = 'none';
+  }
+
+  // Coverage grid
+  const grid = document.getElementById('coverageGrid');
+  let tableHTML = '<table><thead><tr><th>Day</th>';
+  for (let h = startH; h < endH; h++) {
+    tableHTML += `<th>${fmtHour(h)}</th>`;
+  }
+  tableHTML += '</tr></thead><tbody>';
+
+  for (const day of days) {
+    tableHTML += `<tr><td class="day-label">${day.substring(0, 3)}</td>`;
+    for (let h = startH; h < endH; h++) {
+      const c = coverage[day][h];
+      const cls = c.count >= minStaff ? 'ok' : c.count === 0 ? 'danger' : c.count < minStaff ? 'warn' : 'ok';
+      const title = c.names.length ? c.names.join(', ') : 'No one scheduled';
+      tableHTML += `<td class="${cls}" title="${title}">${c.count}</td>`;
+    }
+    tableHTML += '</tr>';
+  }
+
+  tableHTML += '</tbody></table>';
+  grid.innerHTML = tableHTML;
+
+  // Raw data
+  document.getElementById('rawData').textContent = JSON.stringify(schedule, null, 2);
+
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+}
+
+function groupConsecutive(gaps) {
+  if (gaps.length === 0) return [];
+  const groups = [[gaps[0]]];
+  for (let i = 1; i < gaps.length; i++) {
+    if (gaps[i].hour === gaps[i - 1].hour + 1 && gaps[i].count === gaps[i - 1].count) {
+      groups[groups.length - 1].push(gaps[i]);
+    } else {
+      groups.push([gaps[i]]);
+    }
+  }
+  return groups;
+}
+
+function fmtHour(h) {
+  if (h === 0 || h === 24) return '12AM';
+  if (h < 12) return h + 'AM';
+  if (h === 12) return '12PM';
+  return (h - 12) + 'PM';
+}
+</script>
+</body>
+</html>
