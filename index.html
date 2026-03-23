@@ -494,13 +494,23 @@ function handleFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
     const dataUrl = e.target.result;
-    imageBase64 = dataUrl.split(',')[1];
-    imageType = file.type;
-    document.getElementById('previewImg').src = dataUrl;
-    document.getElementById('previewContainer').style.display = 'block';
-    dropzone.style.display = 'none';
-    document.getElementById('analyzeBtn').disabled = false;
-    hideError();
+    // Convert any format (including HEIC) to JPEG via canvas
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      imageBase64 = jpegDataUrl.split(',')[1];
+      imageType = 'image/jpeg';
+      document.getElementById('previewImg').src = jpegDataUrl;
+      document.getElementById('previewContainer').style.display = 'block';
+      dropzone.style.display = 'none';
+      document.getElementById('analyzeBtn').disabled = false;
+      hideError();
+    };
+    img.src = dataUrl;
   };
   reader.readAsDataURL(file);
 }
