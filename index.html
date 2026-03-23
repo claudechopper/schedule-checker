@@ -386,27 +386,8 @@
 </head>
 <body>
 <div class="container">
-  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
-    <h1 style="margin-bottom:0;">Schedule Coverage Checker</h1>
-    <button class="btn btn-outline" onclick="openKeyModal()" style="font-size:0.75rem; padding:6px 12px;" id="changeKeyBtn">⚙ API Key</button>
-  </div>
+  <h1>Schedule Coverage Checker</h1>
   <p class="subtitle">Upload a screenshot of your employee schedule to check for staffing gaps.</p>
-
-  <!-- First-run / change API key modal -->
-  <div id="keyModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center;">
-    <div style="background:var(--card); border:1px solid var(--border); border-radius:14px; padding:28px; width:90%; max-width:480px;">
-      <h2 style="margin-bottom:6px; font-size:1.1rem;">Enter your Claude API Key</h2>
-      <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:16px;">This is stored only in your browser. It's never shared or saved anywhere else.</p>
-      <div class="api-row">
-        <input type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off" style="flex:1; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 14px; color:var(--text); font-size:0.9rem; font-family:monospace;">
-        <button class="btn btn-outline" onclick="toggleKeyVisibility()" id="toggleBtn">Show</button>
-      </div>
-      <div style="display:flex; gap:10px; margin-top:16px;">
-        <button class="btn" onclick="saveKeyFromModal()" style="flex:1;">Save &amp; Continue</button>
-        <button class="btn btn-outline" onclick="closeKeyModal()" id="cancelKeyBtn" style="display:none;">Cancel</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Settings + Upload -->
   <div class="upload-section">
@@ -491,43 +472,6 @@ endSel.value = 19; // 7 PM
 let imageBase64 = null;
 let imageType = null;
 
-// On startup: show modal only if no key saved yet
-window.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('schedule_checker_api_key');
-  if (!saved) {
-    openKeyModal(true);
-  } else {
-    document.getElementById('apiKey').value = saved;
-  }
-});
-
-function openKeyModal(firstRun) {
-  const modal = document.getElementById('keyModal');
-  modal.style.display = 'flex';
-  document.getElementById('cancelKeyBtn').style.display = firstRun ? 'none' : 'inline-block';
-}
-
-function closeKeyModal() {
-  document.getElementById('keyModal').style.display = 'none';
-}
-
-function saveKeyFromModal() {
-  const val = document.getElementById('apiKey').value.trim();
-  if (!val) { alert('Please enter your API key.'); return; }
-  localStorage.setItem('schedule_checker_api_key', val);
-  closeKeyModal();
-}
-
-// Toggle API key visibility
-function toggleKeyVisibility() {
-  const inp = document.getElementById('apiKey');
-  const btn = document.getElementById('toggleBtn');
-  if (inp.type === 'password') {
-    inp.type = 'text'; btn.textContent = 'Hide';
-  } else {
-    inp.type = 'password'; btn.textContent = 'Show';
-  }
-}
 
 // File handling
 const dropzone = document.getElementById('dropzone');
@@ -581,10 +525,11 @@ function hideError() {
   document.getElementById('errorMsg').style.display = 'none';
 }
 
+// Your Railway backend URL
+const RAILWAY_URL = 'https://schedule-checker-api-production.up.railway.app';
+
 // Main analysis
 async function analyzeSchedule() {
-  const apiKey = localStorage.getItem('schedule_checker_api_key') || '';
-  if (!apiKey) { openKeyModal(true); return; }
   if (!imageBase64) { showError('Please upload a schedule image.'); return; }
 
   const startH = parseInt(document.getElementById('startHour').value);
@@ -598,78 +543,29 @@ async function analyzeSchedule() {
   document.getElementById('analyzeBtn').disabled = true;
   document.getElementById('results').style.display = 'none';
 
-  const fmtH = h => h === 0 ? '12AM' : h < 12 ? h + 'AM' : h === 12 ? '12PM' : (h-12) + 'PM';
-
-  const prompt = `You are analyzing an employee work schedule image. Extract every employee's shifts for each day of the week shown.
-
-Return ONLY valid JSON (no markdown, no backticks) in this exact format:
-{
-  "week_label": "string describing the week if visible",
-  "days": ["Monday", "Tuesday", ...],
-  "employees": [
-    {
-      "name": "Employee Name",
-      "shifts": {
-        "Monday": [{"start": "9:00", "end": "17:00"}],
-        "Tuesday": [],
-        ...
-      }
-    }
-  ]
-}
-
-Rules:
-- Use 24-hour time format (e.g., 9:00, 13:30, 17:00, 22:00)
-- If an employee has no shift on a day, use an empty array []
-- If a shift spans a lunch break but appears as one block, keep it as one shift
-- Include ALL employees visible, even if they have no shifts
-- Read times as precisely as possible from the visual grid
-- Include every day column shown in the image
-- Pay close attention to where each colored block starts and ends on the time axis`;
-
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch(`${RAILWAY_URL}/analyze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: imageType, data: imageBase64 }
-            },
-            { type: 'text', text: prompt }
-          ]
-        }]
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64, imageType, startHour: startH, endHour: endH, minStaff })
     });
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error?.message || `API error: ${resp.status}`);
+      throw new Error(err.error || `Server error: ${resp.status}`);
     }
 
     const data = await resp.json();
-    const text = data.content[0].text;
+    const { schedule } = data;
 
-    let schedule;
+    let parsedSchedule;
     try {
-      // Try to extract JSON from potential markdown code blocks
-      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
-      schedule = JSON.parse(jsonMatch[1].trim());
+      parsedSchedule = typeof schedule === 'string' ? JSON.parse(schedule) : schedule;
     } catch (e) {
-      throw new Error('Could not parse schedule data from Claude response. Raw: ' + text.substring(0, 200));
+      throw new Error('Could not parse schedule data from server response.');
     }
 
-    displayResults(schedule, startH, endH, minStaff);
+    displayResults(parsedSchedule, startH, endH, minStaff);
 
   } catch (err) {
     showError(err.message);
