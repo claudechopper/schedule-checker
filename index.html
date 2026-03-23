@@ -386,17 +386,26 @@
 </head>
 <body>
 <div class="container">
-  <h1>Schedule Coverage Checker</h1>
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+    <h1 style="margin-bottom:0;">Schedule Coverage Checker</h1>
+    <button class="btn btn-outline" onclick="openKeyModal()" style="font-size:0.75rem; padding:6px 12px;" id="changeKeyBtn">⚙ API Key</button>
+  </div>
   <p class="subtitle">Upload a screenshot of your employee schedule to check for staffing gaps.</p>
 
-  <!-- API Key -->
-  <div class="api-section">
-    <label>Claude API Key</label>
-    <div class="api-row">
-      <input type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off">
-      <button class="btn btn-outline" onclick="toggleKeyVisibility()" id="toggleBtn">Show</button>
+  <!-- First-run / change API key modal -->
+  <div id="keyModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center;">
+    <div style="background:var(--card); border:1px solid var(--border); border-radius:14px; padding:28px; width:90%; max-width:480px;">
+      <h2 style="margin-bottom:6px; font-size:1.1rem;">Enter your Claude API Key</h2>
+      <p style="color:var(--text-dim); font-size:0.8rem; margin-bottom:16px;">This is stored only in your browser. It's never shared or saved anywhere else.</p>
+      <div class="api-row">
+        <input type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off" style="flex:1; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 14px; color:var(--text); font-size:0.9rem; font-family:monospace;">
+        <button class="btn btn-outline" onclick="toggleKeyVisibility()" id="toggleBtn">Show</button>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:16px;">
+        <button class="btn" onclick="saveKeyFromModal()" style="flex:1;">Save &amp; Continue</button>
+        <button class="btn btn-outline" onclick="closeKeyModal()" id="cancelKeyBtn" style="display:none;">Cancel</button>
+      </div>
     </div>
-    <p class="api-note">Your key is saved in this browser's local storage so you don't have to re-enter it. It never leaves your computer except to go directly to the Claude API. <span id="savedIndicator" style="display:none; color: var(--success); font-weight: 600;">&#10003; Saved</span></p>
   </div>
 
   <!-- Settings + Upload -->
@@ -482,26 +491,32 @@ endSel.value = 19; // 7 PM
 let imageBase64 = null;
 let imageType = null;
 
-// Load saved API key on startup
+// On startup: show modal only if no key saved yet
 window.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem('schedule_checker_api_key');
-  if (saved) {
+  if (!saved) {
+    openKeyModal(true);
+  } else {
     document.getElementById('apiKey').value = saved;
-    document.getElementById('savedIndicator').style.display = 'inline';
   }
 });
 
-// Save key whenever it changes
-document.getElementById('apiKey').addEventListener('input', function() {
-  const val = this.value.trim();
-  if (val) {
-    localStorage.setItem('schedule_checker_api_key', val);
-    document.getElementById('savedIndicator').style.display = 'inline';
-  } else {
-    localStorage.removeItem('schedule_checker_api_key');
-    document.getElementById('savedIndicator').style.display = 'none';
-  }
-});
+function openKeyModal(firstRun) {
+  const modal = document.getElementById('keyModal');
+  modal.style.display = 'flex';
+  document.getElementById('cancelKeyBtn').style.display = firstRun ? 'none' : 'inline-block';
+}
+
+function closeKeyModal() {
+  document.getElementById('keyModal').style.display = 'none';
+}
+
+function saveKeyFromModal() {
+  const val = document.getElementById('apiKey').value.trim();
+  if (!val) { alert('Please enter your API key.'); return; }
+  localStorage.setItem('schedule_checker_api_key', val);
+  closeKeyModal();
+}
 
 // Toggle API key visibility
 function toggleKeyVisibility() {
@@ -568,8 +583,8 @@ function hideError() {
 
 // Main analysis
 async function analyzeSchedule() {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  if (!apiKey) { showError('Please enter your Claude API key.'); return; }
+  const apiKey = localStorage.getItem('schedule_checker_api_key') || '';
+  if (!apiKey) { openKeyModal(true); return; }
   if (!imageBase64) { showError('Please upload a schedule image.'); return; }
 
   const startH = parseInt(document.getElementById('startHour').value);
