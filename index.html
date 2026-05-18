@@ -3,23 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Schedule Checker</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<title>Schedule Checker — Williamsford Pie Co</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; padding: 24px 20px; max-width: 860px; margin: 0 auto; }
+  body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; padding: 24px 20px; max-width: 960px; margin: 0 auto; }
   h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
   .subtitle { color: #8b949e; font-size: 0.88rem; margin-bottom: 22px; }
   .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-bottom: 18px; }
 
   /* Upload */
-  .dropzone { border: 2px dashed #30363d; border-radius: 10px; padding: 44px 20px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+  .upload-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  @media (max-width: 640px) { .upload-row { grid-template-columns: 1fr; } }
+  .dropzone { border: 2px dashed #30363d; border-radius: 10px; padding: 30px 16px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
   .dropzone:hover, .dropzone.drag { border-color: #58a6ff; background: #1c2433; }
   .dropzone input { display: none; }
-  .dz-icon { font-size: 2.4rem; margin-bottom: 10px; }
-  .dz-text { color: #8b949e; font-size: 0.9rem; line-height: 1.6; }
+  .dz-icon { font-size: 2rem; margin-bottom: 8px; }
+  .dz-label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #8b949e; margin-bottom: 8px; }
+  .dz-text { color: #8b949e; font-size: 0.85rem; line-height: 1.5; }
   .dz-text strong { color: #58a6ff; }
-  .filename { margin-top: 10px; font-size: 0.85rem; color: #3fb950; font-weight: 600; }
+  .filename { margin-top: 8px; font-size: 0.82rem; color: #3fb950; font-weight: 600; }
+  .dz-optional { font-size: 0.75rem; color: #6e7681; margin-top: 4px; }
 
   /* Settings */
   .settings { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -58,23 +63,38 @@
   .c-bad  { background: #2d1515; color: #da3633; }
   .c-zero { background: #161b22; color: #484f58; }
 
+  /* Comparison tables */
+  table.comp { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin-bottom: 4px; }
+  table.comp th { background: #21262d; color: #8b949e; padding: 8px 12px; border: 1px solid #30363d; text-align: left; font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  table.comp td { padding: 8px 12px; border: 1px solid #21262d; }
+  table.comp tr:hover td { background: #1c2128; }
+  table.comp .name-col { font-weight: 600; }
+  table.comp .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .delta-up { color: #3fb950; }
+  .delta-down { color: #da3633; }
+  .delta-flat { color: #8b949e; }
+  .comp-totals td { border-top: 2px solid #30363d; font-weight: 700; }
+  .comp-note { font-size: 0.78rem; color: #6e7681; margin-top: 8px; }
+
+  .staff-rule { font-size: 0.78rem; color: #8b949e; margin-bottom: 14px; padding: 6px 0; }
   .reset-row { margin-top: 6px; }
 </style>
 </head>
 <body>
 
-<h1>📋 Schedule Checker</h1>
-<p class="subtitle">Export your schedule from Joltup as CSV, then upload it here</p>
+<h1>Schedule Checker</h1>
+<p class="subtitle">Print your schedule from Jolt as PDF, then upload it here</p>
 
 <div class="card" id="upload-card">
   <div class="settings">
     <div class="sg">
       <label>Open From</label>
       <select id="start-hour">
+        <option value="5">5 AM</option>
+        <option value="6" selected>6 AM</option>
         <option value="7">7 AM</option>
         <option value="8">8 AM</option>
-        <option value="9" selected>9 AM</option>
-        <option value="10">10 AM</option>
+        <option value="9">9 AM</option>
       </select>
     </div>
     <div class="sg">
@@ -82,31 +102,40 @@
       <select id="end-hour">
         <option value="17">5 PM</option>
         <option value="18">6 PM</option>
-        <option value="19" selected>7 PM</option>
+        <option value="19">7 PM</option>
         <option value="20">8 PM</option>
-        <option value="21">9 PM</option>
+        <option value="21" selected>9 PM</option>
         <option value="22">10 PM</option>
       </select>
     </div>
     <div class="sg">
-      <label>Min Staff</label>
-      <select id="min-staff">
-        <option value="1">1</option>
-        <option value="2" selected>2</option>
-        <option value="3">3</option>
-        <option value="4">4</option>
+      <label>2-person start</label>
+      <select id="full-staff-hour">
+        <option value="7">7 AM</option>
+        <option value="8" selected>8 AM</option>
+        <option value="9">9 AM</option>
+        <option value="10">10 AM</option>
       </select>
     </div>
   </div>
+  <div class="staff-rule">6 AM – 8 AM: min 1 person &nbsp;|&nbsp; 8 AM – 9 PM: min 2 people</div>
 
-  <div class="dropzone" id="dropzone">
-    <input type="file" id="file-input" accept=".csv,.xls,.xlsx,text/csv">
-    <div class="dz-icon">📂</div>
-    <div class="dz-text">
-      <strong>Click to upload</strong> or drag & drop<br>
-      Joltup CSV export
+  <div class="upload-row">
+    <div class="dropzone" id="dropzone-current">
+      <input type="file" id="file-current" accept=".pdf,application/pdf">
+      <div class="dz-label">This Week</div>
+      <div class="dz-icon">📂</div>
+      <div class="dz-text"><strong>Click to upload</strong> or drag & drop</div>
+      <div class="filename" id="filename-current"></div>
     </div>
-    <div class="filename" id="filename"></div>
+    <div class="dropzone" id="dropzone-prev">
+      <input type="file" id="file-prev" accept=".pdf,application/pdf">
+      <div class="dz-label">Previous Week</div>
+      <div class="dz-icon">📂</div>
+      <div class="dz-text"><strong>Click to upload</strong> or drag & drop</div>
+      <div class="filename" id="filename-prev"></div>
+      <div class="dz-optional">Optional — enables week comparison</div>
+    </div>
   </div>
 
   <div id="status"></div>
@@ -123,6 +152,15 @@
     <div class="section-label">Coverage Grid</div>
     <div class="grid-scroll"><table class="grid" id="grid"></table></div>
   </div>
+  <div class="card" id="comparison-card" style="display:none;">
+    <div class="section-label">Week-over-Week Comparison</div>
+    <div class="week-range" id="comp-range"></div>
+    <div id="comp-employees"></div>
+  </div>
+  <div class="card" id="day-comparison-card" style="display:none;">
+    <div class="section-label">Daily Hours Comparison</div>
+    <div id="comp-days"></div>
+  </div>
   <div class="reset-row">
     <button class="btn btn-ghost" id="reset-btn">← Upload Another File</button>
   </div>
@@ -130,124 +168,155 @@
 
 <script>
 // ── State ──
-let parsedShifts = []; // [{name, date, dateObj, start, end}]
+let parsedShifts = [];
+let prevShifts = [];
 
 // ── DOM refs ──
-const dropzone   = document.getElementById('dropzone');
-const fileInput  = document.getElementById('file-input');
-const filenameEl = document.getElementById('filename');
-const checkBtn   = document.getElementById('check-btn');
-const statusEl   = document.getElementById('status');
+const dropzoneCurrent = document.getElementById('dropzone-current');
+const dropzonePrev    = document.getElementById('dropzone-prev');
+const fileCurrent     = document.getElementById('file-current');
+const filePrev        = document.getElementById('file-prev');
+const filenameCurrent = document.getElementById('filename-current');
+const filenamePrev    = document.getElementById('filename-prev');
+const checkBtn        = document.getElementById('check-btn');
+const statusEl        = document.getElementById('status');
+const staffRuleEl     = document.querySelector('.staff-rule');
+
+function updateStaffRuleLabel() {
+  var startH = parseInt(document.getElementById('start-hour').value);
+  var fullH  = parseInt(document.getElementById('full-staff-hour').value);
+  var endH   = parseInt(document.getElementById('end-hour').value);
+  staffRuleEl.textContent = fmtHour(startH) + ' – ' + fmtHour(fullH) + ': min 1 person  |  ' + fmtHour(fullH) + ' – ' + fmtHour(endH) + ': min 2 people';
+}
+document.getElementById('start-hour').addEventListener('change', updateStaffRuleLabel);
+document.getElementById('full-staff-hour').addEventListener('change', updateStaffRuleLabel);
+document.getElementById('end-hour').addEventListener('change', updateStaffRuleLabel);
 
 // ── Dropzone wiring ──
-dropzone.addEventListener('click', () => fileInput.click());
-dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
-dropzone.addEventListener('drop', e => {
-  e.preventDefault(); dropzone.classList.remove('drag');
-  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+function wireDropzone(dzEl, inputEl, filenameEl, onLoaded) {
+  dzEl.addEventListener('click', () => inputEl.click());
+  dzEl.addEventListener('dragover', e => { e.preventDefault(); dzEl.classList.add('drag'); });
+  dzEl.addEventListener('dragleave', () => dzEl.classList.remove('drag'));
+  dzEl.addEventListener('drop', e => {
+    e.preventDefault(); dzEl.classList.remove('drag');
+    if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0], filenameEl, onLoaded);
+  });
+  inputEl.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0], filenameEl, onLoaded); });
+}
+
+wireDropzone(dropzoneCurrent, fileCurrent, filenameCurrent, function(shifts) {
+  parsedShifts = shifts;
+  updateCheckBtn();
 });
-fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+wireDropzone(dropzonePrev, filePrev, filenamePrev, function(shifts) {
+  prevShifts = shifts;
+  updateCheckBtn();
+});
+
+function updateCheckBtn() {
+  checkBtn.disabled = parsedShifts.length === 0;
+}
 
 document.getElementById('reset-btn').addEventListener('click', () => {
   parsedShifts = [];
-  fileInput.value = '';
-  filenameEl.textContent = '';
+  prevShifts = [];
+  fileCurrent.value = '';
+  filePrev.value = '';
+  filenameCurrent.textContent = '';
+  filenamePrev.textContent = '';
   checkBtn.disabled = true;
   document.getElementById('results').style.display = 'none';
   document.getElementById('upload-card').style.display = 'block';
+  document.getElementById('comparison-card').style.display = 'none';
+  document.getElementById('day-comparison-card').style.display = 'none';
   hideStatus();
 });
 
-// ── Load & parse CSV ──
-function loadFile(file) {
+// ── Load & parse PDF ──
+function loadFile(file, filenameEl, onLoaded) {
   hideStatus();
   filenameEl.textContent = '';
-  parsedShifts = [];
-  checkBtn.disabled = true;
+  onLoaded([]);
 
-  Papa.parse(file, {
-    header: true,
-    skipEmptyLines: true,
-    complete: function(results) {
-      try {
-        const shifts = parseJoltupCSV(results.data);
-        if (shifts.length === 0) {
-          showError('No shifts found in this file. Make sure you\'re uploading the Joltup schedule export.');
-          return;
-        }
-        parsedShifts = shifts;
-        filenameEl.textContent = '✓ ' + file.name + ' — ' + shifts.length + ' shifts loaded';
-        checkBtn.disabled = false;
-      } catch(e) {
-        showError('Could not read file: ' + e.message);
+  var reader = new FileReader();
+  reader.onload = function() {
+    var typedArray = new Uint8Array(reader.result);
+    pdfjsLib.getDocument(typedArray).promise.then(function(pdf) {
+      var pagePromises = [];
+      for (var i = 1; i <= pdf.numPages; i++) {
+        pagePromises.push(pdf.getPage(i).then(function(page) {
+          return page.getTextContent().then(function(tc) {
+            return tc.items.map(function(item) { return item.str; }).join(' ');
+          });
+        }));
       }
-    },
-    error: function(e) { showError('Parse error: ' + e.message); }
-  });
+      return Promise.all(pagePromises);
+    }).then(function(pages) {
+      var fullText = pages.join('\n');
+      var shifts = parseJoltPDF(fullText);
+      if (shifts.length === 0) {
+        showError('No shifts found. Make sure this is a Jolt schedule PDF.');
+        return;
+      }
+      filenameEl.textContent = '✓ ' + file.name + ' — ' + shifts.length + ' shifts';
+      onLoaded(shifts);
+    }).catch(function(e) {
+      showError('Could not read PDF: ' + e.message);
+    });
+  };
+  reader.onerror = function() { showError('Could not read file.'); };
+  reader.readAsArrayBuffer(file);
 }
 
-function parseJoltupCSV(rows) {
-  const shifts = [];
-  rows.forEach(function(row) {
-    // Column names (case-insensitive, trim whitespace)
-    const cols = {};
-    Object.keys(row).forEach(function(k) { cols[k.trim().toLowerCase()] = row[k]; });
+var MONTH_MAP = {january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
 
-    const name    = cols['employee'] || cols['name'] || cols['employee name'] || '';
-    const dateStr = cols['date'] || '';
-    const timeIn  = cols['time in'] || cols['start'] || cols['start time'] || '';
-    const timeOut = cols['time out'] || cols['end'] || cols['end time'] || '';
+function parseJoltPDF(text) {
+  var shifts = [];
+  var currentDate = null;
 
-    if (!name || !dateStr || !timeIn || !timeOut) return;
+  var dayHeaderRe = /(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})/gi;
+  var shiftRe = /Team\s+Member\s+(.+?)\s+(\d{1,2}:\d{2}\s*[ap]m)\s+(\d{1,2}:\d{2}\s*[ap]m)\s+[\d.]+/gi;
 
-    const dateObj = parseDate(dateStr);
-    if (!dateObj) return;
+  var lines = text.replace(/\r\n/g, '\n').split('\n');
+  var fullText = lines.join(' ');
 
-    const start = parseTime(timeIn);
-    const end   = parseTime(timeOut);
-    if (start === null || end === null) return;
+  var parts = fullText.split(/((?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s*\d{4})/i);
 
-    shifts.push({ name: name.trim(), dateObj: dateObj, start: start, end: end });
-  });
+  for (var i = 1; i < parts.length; i += 2) {
+    var headerMatch = parts[i].match(/(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})/i);
+    if (!headerMatch) continue;
+    var month = MONTH_MAP[headerMatch[1].toLowerCase()];
+    var day = parseInt(headerMatch[2]);
+    var year = parseInt(headerMatch[3]);
+    currentDate = new Date(year, month, day);
+
+    var block = parts[i + 1] || '';
+    var sm;
+    var re = /Team\s+Member\s+(.+?)\s+(\d{1,2}:\d{2}\s*[ap]m)\s+(\d{1,2}:\d{2}\s*[ap]m)\s+[\d.]+/gi;
+    while ((sm = re.exec(block)) !== null) {
+      var name = sm[1].trim();
+      var startT = parseTime(sm[2]);
+      var endT = parseTime(sm[3]);
+      if (startT !== null && endT !== null) {
+        shifts.push({ name: name, dateObj: new Date(currentDate), start: startT, end: endT });
+      }
+    }
+  }
   return shifts;
 }
 
-// Parse dates: "2026-03-30", "03/30/2026", "March 30, 2026", "30/03/2026" etc.
-function parseDate(str) {
-  if (!str) return null;
-  str = str.trim();
-  // ISO: 2026-03-30
-  var m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) return new Date(+m[1], +m[2]-1, +m[3]);
-  // MM/DD/YYYY
-  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) return new Date(+m[3], +m[1]-1, +m[2]);
-  // DD/MM/YYYY
-  m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-  if (m) { var yr = +m[3]; if (yr < 100) yr += 2000; return new Date(yr, +m[2]-1, +m[1]); }
-  // "March 30, 2026"
-  var d = new Date(str);
-  if (!isNaN(d)) return d;
-  return null;
-}
-
-// Parse times: "9:00 AM", "09:00", "9:00", "21:00", "9:00:00 AM" etc.
-// Returns decimal hours (9.5 = 9:30 AM)
 function parseTime(str) {
   if (!str) return null;
   str = str.trim();
-  // "9:00 AM" / "9:00:00 PM"
-  var m = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  var m = str.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
   if (m) {
-    var h = +m[1], min = +m[2], ampm = m[3].toUpperCase();
-    if (ampm === 'AM') { if (h === 12) h = 0; }
+    var h = +m[1], min = +m[2], ampm = m[3].toLowerCase();
+    if (ampm === 'am') { if (h === 12) h = 0; }
     else               { if (h !== 12) h += 12; }
-    return h + min/60;
+    return h + min / 60;
   }
-  // "09:00" or "9:00" (24-hr or bare)
-  m = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-  if (m) return +m[1] + +m[2]/60;
+  m = str.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) return +m[1] + +m[2] / 60;
   return null;
 }
 
@@ -256,14 +325,15 @@ checkBtn.addEventListener('click', function() { runCheck(); });
 
 function runCheck() {
   if (!parsedShifts.length) return;
-  const startH  = parseInt(document.getElementById('start-hour').value);
-  const endH    = parseInt(document.getElementById('end-hour').value);
-  const minStaff = parseInt(document.getElementById('min-staff').value);
+  const startH    = parseInt(document.getElementById('start-hour').value);
+  const endH      = parseInt(document.getElementById('end-hour').value);
+  const fullStaffH = parseInt(document.getElementById('full-staff-hour').value);
+  function minStaffAt(h) { return h < fullStaffH ? 1 : 2; }
 
   // Group by date, sorted
   const dateMap = {};
   parsedShifts.forEach(function(s) {
-    var key = s.dateObj.toISOString().slice(0,10); // "2026-03-30"
+    var key = s.dateObj.getFullYear() + '-' + String(s.dateObj.getMonth()+1).padStart(2,'0') + '-' + String(s.dateObj.getDate()).padStart(2,'0');
     if (!dateMap[key]) dateMap[key] = { dateObj: s.dateObj, shifts: [] };
     dateMap[key].shifts.push(s);
   });
@@ -302,19 +372,22 @@ function runCheck() {
   dateKeys.forEach(function(dk) {
     var label = fmtDayDate(dateMap[dk].dateObj);
     var gapStart = null;
+    var gapReq = 0;
     for (var i = 0; i <= hours.length; i++) {
       var h = hours[i];
-      var cnt = (h !== undefined) ? coverage[dk][h] : minStaff;
-      if (cnt < minStaff) {
-        if (gapStart === null) gapStart = h;
-      } else {
+      var req = (h !== undefined) ? minStaffAt(h) : 0;
+      var cnt = (h !== undefined) ? coverage[dk][h] : 99;
+      var isGap = (h !== undefined) && cnt < req;
+      var reqChanged = gapStart !== null && req !== gapReq;
+      if (reqChanged || !isGap) {
         if (gapStart !== null) {
+          var endLabel = (h !== undefined) ? h : endH;
           var names = unique(staffNames[dk][gapStart]);
           var div = document.createElement('div');
           div.className = 'gap-item';
           var who = names.length ? names.join(', ') : 'nobody scheduled';
-          div.innerHTML = '<div class="gap-day">' + label + '</div>' +
-            '<div class="gap-detail">' + fmtHour(gapStart) + ' – ' + fmtHour(h) +
+          div.innerHTML = '<div class="gap-day">' + label + ' <span style="font-weight:400;color:#8b949e;">(need ' + gapReq + ')</span></div>' +
+            '<div class="gap-detail">' + fmtHour(gapStart) + ' – ' + fmtHour(endLabel) +
             ' — only ' + coverage[dk][gapStart] + ' person' + (coverage[dk][gapStart] !== 1 ? 's' : '') +
             ' (' + who + ')</div>';
           gapsEl.appendChild(div);
@@ -322,6 +395,7 @@ function runCheck() {
           gapStart = null;
         }
       }
+      if (isGap && gapStart === null) { gapStart = h; gapReq = req; }
     }
   });
   if (totalGaps === 0) {
@@ -336,7 +410,8 @@ function runCheck() {
     html += '<tr><th>' + shortLabel + '</th>';
     hours.forEach(function(h) {
       var n = coverage[dk][h];
-      var cls = n >= minStaff ? 'c-ok' : n > 0 ? 'c-warn' : 'c-bad';
+      var req = minStaffAt(h);
+      var cls = n >= req ? 'c-ok' : n > 0 ? 'c-warn' : 'c-bad';
       var tip = (staffNames[dk][h] || []).join(', ') || 'nobody';
       html += '<td class="' + cls + '" title="' + tip + '">' + n + '</td>';
     });
@@ -346,6 +421,104 @@ function runCheck() {
 
   document.getElementById('upload-card').style.display = 'none';
   document.getElementById('results').style.display = 'block';
+
+  // Week comparison
+  if (prevShifts.length > 0) {
+    renderComparison(parsedShifts, prevShifts);
+  } else {
+    document.getElementById('comparison-card').style.display = 'none';
+    document.getElementById('day-comparison-card').style.display = 'none';
+  }
+}
+
+// ── Week-over-Week Comparison ──
+function getEmployeeHours(shifts) {
+  var hours = {};
+  shifts.forEach(function(s) {
+    var h = s.end - s.start;
+    if (h < 0) h = 0;
+    hours[s.name] = (hours[s.name] || 0) + h;
+  });
+  return hours;
+}
+
+function getDayHours(shifts) {
+  var days = {};
+  shifts.forEach(function(s) {
+    var dayName = DAYS[s.dateObj.getDay()];
+    var h = s.end - s.start;
+    if (h < 0) h = 0;
+    days[dayName] = (days[dayName] || 0) + h;
+  });
+  return days;
+}
+
+function fmtDelta(diff, prev, curr) {
+  if (diff === 0) return '<span class="delta-flat">—</span>';
+  if (prev === 0 && curr > 0) return '<span class="delta-up">NEW +' + curr.toFixed(1) + 'h</span>';
+  if (curr === 0 && prev > 0) return '<span class="delta-down">GONE -' + prev.toFixed(1) + 'h</span>';
+  var pct = (diff / prev) * 100;
+  var sign = diff > 0 ? '+' : '';
+  var cls = diff > 0 ? 'delta-up' : 'delta-down';
+  var arrow = diff > 0 ? '↑' : '↓';
+  return '<span class="' + cls + '">' + arrow + ' ' + sign + diff.toFixed(1) + 'h (' + sign + pct.toFixed(1) + '%)</span>';
+}
+
+function renderComparison(currentShifts, previousShifts) {
+  var currEmp = getEmployeeHours(currentShifts);
+  var prevEmp = getEmployeeHours(previousShifts);
+
+  // Get all employee names from both weeks
+  var allNames = {};
+  Object.keys(currEmp).forEach(function(n) { allNames[n] = 1; });
+  Object.keys(prevEmp).forEach(function(n) { allNames[n] = 1; });
+  var names = Object.keys(allNames).sort();
+
+  // Employee comparison table
+  var html = '<table class="comp"><tr><th>Employee</th><th class="num">Prev Week</th><th class="num">This Week</th><th class="num">Change</th></tr>';
+  var totalCurr = 0, totalPrev = 0;
+  names.forEach(function(name) {
+    var curr = currEmp[name] || 0;
+    var prev = prevEmp[name] || 0;
+    totalCurr += curr;
+    totalPrev += prev;
+    var diff = curr - prev;
+    html += '<tr><td class="name-col">' + name + '</td><td class="num">' + prev.toFixed(1) + 'h</td><td class="num">' + curr.toFixed(1) + 'h</td><td class="num">' + fmtDelta(diff, prev, curr) + '</td></tr>';
+  });
+  // Totals row
+  var totalDiff = totalCurr - totalPrev;
+  html += '<tr class="comp-totals"><td class="name-col">TOTAL</td><td class="num">' + totalPrev.toFixed(1) + 'h</td><td class="num">' + totalCurr.toFixed(1) + 'h</td><td class="num">' + fmtDelta(totalDiff, totalPrev, totalCurr) + '</td></tr>';
+  html += '</table>';
+
+  document.getElementById('comp-employees').innerHTML = html;
+  document.getElementById('comparison-card').style.display = 'block';
+
+  // Date ranges for label
+  var currDates = currentShifts.map(function(s){ return s.dateObj; }).sort(function(a,b){ return a-b; });
+  var prevDates = previousShifts.map(function(s){ return s.dateObj; }).sort(function(a,b){ return a-b; });
+  document.getElementById('comp-range').textContent = fmtDate(prevDates[0]) + ' – ' + fmtDate(prevDates[prevDates.length-1]) + '  vs  ' + fmtDate(currDates[0]) + ' – ' + fmtDate(currDates[currDates.length-1]);
+
+  // Daily comparison
+  var currDays = getDayHours(currentShifts);
+  var prevDays = getDayHours(previousShifts);
+  var dayOrder = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  var dhtml = '<table class="comp"><tr><th>Day</th><th class="num">Prev Week</th><th class="num">This Week</th><th class="num">Change</th></tr>';
+  var dayTotalCurr = 0, dayTotalPrev = 0;
+  dayOrder.forEach(function(day) {
+    var curr = currDays[day] || 0;
+    var prev = prevDays[day] || 0;
+    dayTotalCurr += curr;
+    dayTotalPrev += prev;
+    var diff = curr - prev;
+    dhtml += '<tr><td class="name-col">' + day + '</td><td class="num">' + prev.toFixed(1) + 'h</td><td class="num">' + curr.toFixed(1) + 'h</td><td class="num">' + fmtDelta(diff, prev, curr) + '</td></tr>';
+  });
+  var dTotalDiff = dayTotalCurr - dayTotalPrev;
+  dhtml += '<tr class="comp-totals"><td class="name-col">TOTAL</td><td class="num">' + dayTotalPrev.toFixed(1) + 'h</td><td class="num">' + dayTotalCurr.toFixed(1) + 'h</td><td class="num">' + fmtDelta(dTotalDiff, dayTotalPrev, dayTotalCurr) + '</td></tr>';
+  dhtml += '</table>';
+
+  document.getElementById('comp-days').innerHTML = dhtml;
+  document.getElementById('day-comparison-card').style.display = 'block';
 }
 
 // ── Helpers ──
