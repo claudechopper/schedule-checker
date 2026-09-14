@@ -83,7 +83,7 @@
 <body>
 
 <h1>Schedule Checker</h1>
-<p class="subtitle">Print your schedule from Jolt as PDF, then upload it here</p>
+<p class="subtitle">Export your schedule from Jolt as PDF or CSV, then upload it here</p>
 
 <div class="card" id="upload-card">
   <div class="settings">
@@ -122,17 +122,17 @@
 
   <div class="upload-row">
     <div class="dropzone" id="dropzone-current">
-      <input type="file" id="file-current" accept=".pdf,application/pdf">
+      <input type="file" id="file-current" accept=".pdf,.csv,application/pdf,text/csv">
       <div class="dz-label">This Week</div>
       <div class="dz-icon">📂</div>
-      <div class="dz-text"><strong>Click to upload</strong> or drag & drop</div>
+      <div class="dz-text"><strong>Click to upload</strong> or drag & drop<br>PDF or CSV</div>
       <div class="filename" id="filename-current"></div>
     </div>
     <div class="dropzone" id="dropzone-prev">
-      <input type="file" id="file-prev" accept=".pdf,application/pdf">
+      <input type="file" id="file-prev" accept=".pdf,.csv,application/pdf,text/csv">
       <div class="dz-label">Previous Week</div>
       <div class="dz-icon">📂</div>
-      <div class="dz-text"><strong>Click to upload</strong> or drag & drop</div>
+      <div class="dz-text"><strong>Click to upload</strong> or drag & drop<br>PDF or CSV</div>
       <div class="filename" id="filename-prev"></div>
       <div class="dz-optional">Optional — enables week comparison</div>
     </div>
@@ -232,11 +232,27 @@ document.getElementById('reset-btn').addEventListener('click', () => {
   hideStatus();
 });
 
-// ── Load & parse PDF ──
+// ── Load & parse PDF or CSV ──
 function loadFile(file, filenameEl, onLoaded) {
   hideStatus();
   filenameEl.textContent = '';
   onLoaded([]);
+
+  if (/\.csv$/i.test(file.name) || file.type === 'text/csv') {
+    var csvReader = new FileReader();
+    csvReader.onload = function() {
+      var shifts = parseJoltCSV(csvReader.result);
+      if (shifts.length === 0) {
+        showError('No shifts found in ' + file.name + '. Make sure it\'s a Jolt schedule CSV with shift rows under the header.');
+        return;
+      }
+      filenameEl.textContent = '✓ ' + file.name + ' — ' + shifts.length + ' shifts';
+      onLoaded(shifts);
+    };
+    csvReader.onerror = function() { showError('Could not read file.'); };
+    csvReader.readAsText(file);
+    return;
+  }
 
   var reader = new FileReader();
   reader.onload = function() {
@@ -303,6 +319,50 @@ function parseJoltPDF(text) {
     }
   }
   return shifts;
+}
+
+// Jolt CSV export: Role,Employee,"Employee Id","Phone Number",Email,Date,"Time In","Time Out",Hours
+// ponytail: ISO dates only (what Jolt exports); add M/D/YYYY if another source shows up
+function parseJoltCSV(text) {
+  var rows = parseCSVRows(text);
+  if (rows.length < 2) return [];
+  var header = rows[0].map(function(h) { return h.trim().toLowerCase(); });
+  var iName = header.indexOf('employee'), iDate = header.indexOf('date');
+  var iIn = header.indexOf('time in'), iOut = header.indexOf('time out');
+  if (iName < 0 || iDate < 0 || iIn < 0 || iOut < 0) return [];
+  var shifts = [];
+  rows.slice(1).forEach(function(r) {
+    var name = (r[iName] || '').trim();
+    var dm = (r[iDate] || '').trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    var start = parseTime(r[iIn]), end = parseTime(r[iOut]);
+    if (!name || !dm || start === null || end === null) return;
+    shifts.push({ name: name, dateObj: new Date(+dm[1], +dm[2] - 1, +dm[3]), start: start, end: end });
+  });
+  return shifts;
+}
+
+// Minimal CSV reader: quoted fields, "" escapes, commas/newlines inside quotes, CRLF/CR/LF.
+function parseCSVRows(text) {
+  var rows = [], row = [], field = '', q = false;
+  text = text.replace(/^﻿/, '');
+  for (var i = 0; i < text.length; i++) {
+    var c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (c === '"') q = false;
+      else field += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  row.push(field);
+  if (row.length > 1 || row[0] !== '') rows.push(row);
+  return rows;
 }
 
 function parseTime(str) {
