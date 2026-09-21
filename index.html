@@ -78,6 +78,19 @@
 
   .staff-rule { font-size: 0.78rem; color: #8b949e; margin-bottom: 14px; padding: 6px 0; }
   .reset-row { margin-top: 6px; }
+
+  /* Daily report */
+  .rep-day { padding: 11px 0; border-bottom: 1px solid #21262d; }
+  .rep-day:first-child { padding-top: 0; }
+  .rep-day:last-child { border-bottom: none; padding-bottom: 0; }
+  .rep-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 5px; }
+  .rep-meta { color: #8b949e; font-weight: 400; font-size: 0.8rem; }
+  .rep-line { font-size: 0.85rem; margin: 3px 0 3px 8px; }
+  .rep-thin { color: #d29922; }
+  .rep-heavy { color: #58a6ff; }
+  .rep-warn { color: #ffa198; }
+  .rep-ok { color: #3fb950; }
+  .rep-note { font-size: 0.78rem; color: #6e7681; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -117,6 +130,15 @@
         <option value="10">10 AM</option>
       </select>
     </div>
+    <div class="sg">
+      <label>Too many =</label>
+      <select id="heavy-min">
+        <option value="3">3+</option>
+        <option value="4" selected>4+</option>
+        <option value="5">5+</option>
+        <option value="6">6+</option>
+      </select>
+    </div>
   </div>
   <div class="staff-rule">6 AM – 8 AM: min 1 person &nbsp;|&nbsp; 8 AM – 9 PM: min 2 people</div>
 
@@ -147,6 +169,11 @@
     <div class="section-label">Staffing Gaps</div>
     <div class="week-range" id="week-range"></div>
     <div id="gaps-list"></div>
+  </div>
+  <div class="card">
+    <div class="section-label">Daily Report</div>
+    <div id="report-list"></div>
+    <div class="rep-note" id="report-note"></div>
   </div>
   <div class="card">
     <div class="section-label">Coverage Grid</div>
@@ -479,6 +506,9 @@ function runCheck() {
   });
   gridEl.innerHTML = html;
 
+  renderReport(dateKeys, dateMap, coverage, staffNames, hours, startH, endH,
+    parseInt(document.getElementById('heavy-min').value));
+
   document.getElementById('upload-card').style.display = 'none';
   document.getElementById('results').style.display = 'block';
 
@@ -489,6 +519,80 @@ function runCheck() {
     document.getElementById('comparison-card').style.display = 'none';
     document.getElementById('day-comparison-card').style.display = 'none';
   }
+}
+
+// ── Daily Report ──
+// ponytail: report floor hardcoded per owner's rule — early solo hours are normal,
+// so thin/heavy reporting starts 8AM on weekdays, 7AM on weekends.
+function reportFloor(dateObj) {
+  var wd = dateObj.getDay();
+  return (wd === 0 || wd === 6) ? 7 : 8;
+}
+
+function esc(s) {
+  var d = document.createElement('span');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function renderReport(dateKeys, dateMap, coverage, staffNames, hours, startH, endH, heavyMin) {
+  var el = document.getElementById('report-list');
+  el.innerHTML = '';
+
+  dateKeys.forEach(function(dk) {
+    var d = dateMap[dk].dateObj;
+    var repStart = Math.max(reportFloor(d), startH);
+    var shifts = dateMap[dk].shifts;
+    var people = unique(shifts.map(function(s){ return s.name; }));
+    var totalH = shifts.reduce(function(t, s){ return t + Math.max(0, s.end - s.start); }, 0);
+    var closers = unique(shifts.filter(function(s){ return s.end >= endH; }).map(function(s){ return s.name; }));
+    var openers = unique(shifts.filter(function(s){ return s.start <= startH; }).map(function(s){ return s.name; }));
+
+    var lines = [];
+    var closerCls = closers.length >= 2 ? 'rep-ok' : 'rep-warn';
+    lines.push('<div class="rep-line ' + closerCls + '">🌙 Closers to ' + fmtHour(endH) + ': ' +
+      (closers.length ? closers.length + ' — ' + esc(closers.join(', ')) : 'NOBODY closes') + '</div>');
+    lines.push('<div class="rep-line">☀️ Openers at ' + fmtHour(startH) + ': ' +
+      (openers.length ? esc(openers.join(', ')) : 'nobody') + '</div>');
+
+    // Merge consecutive hours with the same status into ranges (heavy shows the peak)
+    var runs = [];
+    hours.forEach(function(h) {
+      if (h < repStart) return;
+      var n = coverage[dk][h];
+      var status = n <= 1 ? 'thin' : n >= heavyMin ? 'heavy' : 'ok';
+      var last = runs[runs.length - 1];
+      if (last && last.status === status && last.end === h && (status === 'heavy' || last.n === n)) {
+        last.end = h + 1;
+        last.n = Math.max(last.n, n);
+      } else runs.push({ status: status, n: n, start: h, end: h + 1 });
+    });
+
+    var flagged = false;
+    runs.forEach(function(r) {
+      if (r.status === 'thin') {
+        flagged = true;
+        var who = unique(staffNames[dk][r.start]);
+        lines.push('<div class="rep-line rep-thin">🔻 Thin: ' + fmtHour(r.start) + ' – ' + fmtHour(r.end) +
+          ' — ' + (r.n === 0 ? 'nobody scheduled' : 'only 1 person (' + esc(who.join(', ')) + ')') + '</div>');
+      } else if (r.status === 'heavy') {
+        flagged = true;
+        lines.push('<div class="rep-line rep-heavy">🔺 Heavy: ' + fmtHour(r.start) + ' – ' + fmtHour(r.end) +
+          ' — up to ' + r.n + ' people on</div>');
+      }
+    });
+    if (!flagged) lines.push('<div class="rep-line rep-ok">✅ Staffing looks balanced all day</div>');
+
+    var div = document.createElement('div');
+    div.className = 'rep-day';
+    div.innerHTML = '<div class="rep-title">' + fmtDayDate(d) +
+      ' <span class="rep-meta">· ' + people.length + ' people · ' + totalH.toFixed(1) + 'h scheduled</span></div>' +
+      lines.join('');
+    el.appendChild(div);
+  });
+
+  document.getElementById('report-note').textContent =
+    'Thin/heavy checks start at 8AM on weekdays and 7AM on weekends — the early solo hours are normal and not reported. Heavy = ' + heavyMin + '+ people at once.';
 }
 
 // ── Week-over-Week Comparison ──
